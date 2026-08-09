@@ -87,7 +87,7 @@ curl --fail --silent --show-error http://127.0.0.1/api/ready
 
 | 脚本 | 用途与安全边界 |
 |------|----------------|
-| `一键启动MVP.bat` | 执行 `docker compose up -d`，等待后逐项打印四个服务的中文健康状态。日常启动使用；它不会自动重建旧标签镜像。成功后从 `http://localhost` 访问管理后台，Flutter后端地址同样填写 `http://localhost`，不要添加 `:8000`。 |
+| `一键启动MVP.bat` | 执行 `docker compose up -d`，等待后逐项打印四个服务的中文健康状态。日常启动使用；它不会自动重建旧标签镜像。成功后从 `http://localhost` 访问管理后台，Flutter后端地址填写 `http://localhost/api`，不要添加 `:8000`。 |
 | `一键停止MVP.bat` | 执行不带 `-v` 的 `docker compose down`。容器和网络会停止并移除，业务数据继续保留在具名卷 `zhitian-mvp-data` 中。 |
 | `重新构建并启动MVP.bat` | 代码或依赖更新后执行无缓存镜像构建，再运行 `docker compose down -v && docker compose up -d`。**该脚本会清空全部账号、文档、向量和历史记录**，只有输入完整的 `yes` 才会继续；普通升级若需要保留数据，不得使用此脚本。 |
 | `获取0号密码.bat` | 人工运行生产初始化脚本，创建0号developer并显示一次性密码。密码只显示一次，必须立即保存；0号、真实developer或业务数据已经存在时会拒绝重复初始化。 |
