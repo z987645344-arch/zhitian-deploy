@@ -1,0 +1,17 @@
+# 运行时密钥与本地覆盖
+.env
+.env.*
+!.env.example
+
+# 运行数据与备份产物
+data/
+backups/
+offline-backups/
+*.ztbackup
+
+# 日志、编辑器和系统临时文件
+*.log
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
