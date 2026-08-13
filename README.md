@@ -13,7 +13,7 @@
 
 ## 使用前提
 
-- 已安装 Docker 与 Docker Compose；本项目已在 Docker Desktop 29.6.2、Docker Compose 5.3.1、WSL2 环境验证。
+- 已安装 Docker 与 Docker Compose；由于API服务的`env_file`使用`format: raw`防止密钥中的`$`被Compose插值，Docker Compose必须为**2.30.0或更高版本**。本项目已在Docker Desktop 29.6.2、Docker Compose 5.3.1、WSL2环境验证。
 - 当前Phase B服务器实例要求在本仓库同目录、且不进入Git的`.env`中设置`SERVER_PUBLIC_IP`；宿主机网卡必须真实拥有该地址，且该地址的TCP 80未被其他进程占用。Compose只把知天入口发布到`${SERVER_PUBLIC_IP}:80`，不再通配监听整机所有网卡。若云厂商只做公网NAT而未把该地址配置到网卡，启动前必须先处理网络映射，不能直接套用本绑定。
 - 三个仓库必须位于同一父目录，目录名保持如下：
 
@@ -55,6 +55,8 @@ cp ../zhitian/.env.example ../zhitian/.env
 ```bash
 docker compose config --quiet
 ```
+
+后端`../zhitian/.env`必须使用不带引号的`KEY=value`格式。API服务通过长语法`env_file.path + format: raw`注入该文件，避免bcrypt哈希或未来轮换后的密钥中出现`$`时被Compose当成变量引用；`raw`也会把引号视为值本身，因此不要写成`KEY="value"`。部署仓库自己的`.env`仍由Compose用于`${SERVER_PUBLIC_IP}`插值，不属于该`raw`边界。
 
 ## 构建与启动
 

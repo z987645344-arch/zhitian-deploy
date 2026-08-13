@@ -13,7 +13,8 @@ services:
       context: ../zhitian
       dockerfile: Dockerfile
     env_file:
-      - ../zhitian/.env
+      - path: ../zhitian/.env
+        format: raw
     environment:
       LIBREOFFICE_PATH: /usr/bin/soffice
       TMPDIR: /app/data/tmp_uploads
