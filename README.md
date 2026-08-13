@@ -14,6 +14,7 @@
 ## 使用前提
 
 - 已安装 Docker 与 Docker Compose；本项目已在 Docker Desktop 29.6.2、Docker Compose 5.3.1、WSL2 环境验证。
+- 当前Phase B服务器实例要求在本仓库同目录、且不进入Git的`.env`中设置`SERVER_PUBLIC_IP`；宿主机网卡必须真实拥有该地址，且该地址的TCP 80未被其他进程占用。Compose只把知天入口发布到`${SERVER_PUBLIC_IP}:80`，不再通配监听整机所有网卡。若云厂商只做公网NAT而未把该地址配置到网卡，启动前必须先处理网络映射，不能直接套用本绑定。
 - 三个仓库必须位于同一父目录，目录名保持如下：
 
 ```text
@@ -73,13 +74,18 @@ docker compose up -d --no-build
 健康检查：
 
 ```bash
-curl --fail --silent --show-error http://127.0.0.1/
-curl --fail --silent --show-error http://127.0.0.1/customer/login.html
-curl --fail --silent --show-error http://127.0.0.1/api/health
-curl --fail --silent --show-error http://127.0.0.1/api/ready
+set -a
+. ./.env
+set +a
+curl --fail --silent --show-error "http://${SERVER_PUBLIC_IP}/"
+curl --fail --silent --show-error "http://${SERVER_PUBLIC_IP}/customer/login.html"
+curl --fail --silent --show-error "http://${SERVER_PUBLIC_IP}/api/health"
+curl --fail --silent --show-error "http://${SERVER_PUBLIC_IP}/api/ready"
 ```
 
-只有反向代理映射宿主机 `80` 端口；API、管理后台和 customer 网页端的内部端口不会直接暴露。
+只有反向代理映射宿主机`${SERVER_PUBLIC_IP}:80`；API、管理后台和customer网页端的内部端口不会直接暴露。容器健康检查仍在各容器内部访问`127.0.0.1:8080/8000`，不依赖宿主机发布地址。
+
+> 当前`docker-compose.yml`通过未跟踪的`SERVER_PUBLIC_IP`接收实例专属IP。下面的Windows批处理不会自动猜测地址；在其他主机使用前必须先从`.env.example`复制并填写本机值。Phase C交付时同样由客户填写自己的地址，不携带个人服务器IP。
 
 ## Windows 一键操作脚本
 
