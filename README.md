@@ -35,10 +35,18 @@ workspace/
 git clone https://github.com/z987645344-arch/zhitian.git
 git clone https://github.com/z987645344-arch/zhitian_admin.git
 git clone https://github.com/z987645344-arch/zhitian-deploy.git
+git -C zhitian fetch --tags origin
+git -C zhitian checkout --detach v3.3
+git -C zhitian_admin fetch --tags origin
+git -C zhitian_admin checkout --detach v3.2
+git -C zhitian-deploy fetch --tags origin
+git -C zhitian-deploy checkout --detach v3.3
 cd zhitian-deploy
 ```
 
 `zhitian-deploy`是私有仓库，clone 前需要为 GitHub 配置有权访问该仓库的凭据。
+生产服务器必须checkout运维单指定的精确标签，不使用`git pull`盲跟`master`或`main`。
+上面是当前已确认组合；后续发布新版本时，应按新运维单同时更新三个目标标签。
 
 ## 准备配置
 
@@ -46,9 +54,12 @@ cd zhitian-deploy
 
 ```bash
 cp ../zhitian/.env.example ../zhitian/.env
+cp .env.example .env
 ```
 
-将占位值替换为部署实例自己的真实配置。`.env`不会进入本仓库，也不得写进 Compose、Dockerfile、镜像或日志。
+分别填写后端运行配置和部署仓库`.env`中的`SERVER_PUBLIC_IP`。如果后者未定义，
+`${SERVER_PUBLIC_IP}:80:8080`无法展开，`docker compose config`会直接失败。
+两份`.env`都不会进入Git，也不得写进Compose、Dockerfile、镜像或日志。
 
 验证 Compose 能解析且不打印展开后的环境变量：
 
@@ -95,7 +106,7 @@ curl --fail --silent --show-error "http://${SERVER_PUBLIC_IP}/api/ready"
 
 | 脚本 | 用途与安全边界 |
 |------|----------------|
-| `一键启动MVP.bat` | 执行 `docker compose up -d`，等待后逐项打印四个服务的中文健康状态。日常启动使用；它不会自动重建旧标签镜像。成功后从 `http://localhost` 访问管理后台，Flutter后端地址填写 `http://localhost/api`，不要添加 `:8000`。 |
+| `一键启动MVP.bat` | 执行 `docker compose up -d`，等待后逐项打印四个服务的中文健康状态。日常启动使用；它不会自动重建旧标签镜像。管理后台和customer网页端的访问地址以`.env`中`SERVER_PUBLIC_IP`实际值为准，即`http://<SERVER_PUBLIC_IP>`。只有本机回环部署（值为`127.0.0.1`）时，Flutter调试客户端才填写`http://localhost/api`；非回环或远程客户端必须等待HTTPS域名接入，不能填写裸HTTP公网IP，也不要添加`:8000`。 |
 | `一键停止MVP.bat` | 执行不带 `-v` 的 `docker compose down`。容器和网络会停止并移除，业务数据继续保留在具名卷 `zhitian-mvp-data` 中。 |
 | `重新构建并启动MVP.bat` | 代码或依赖更新后执行无缓存镜像构建，再运行 `docker compose down -v && docker compose up -d`。**该脚本会清空全部账号、文档、向量和历史记录**，只有输入完整的 `yes` 才会继续；普通升级若需要保留数据，不得使用此脚本。 |
 | `获取0号密码.bat` | 人工运行生产初始化脚本，创建0号developer并显示一次性密码。密码只显示一次，必须立即保存；0号、真实developer或业务数据已经存在时会拒绝重复初始化。 |
@@ -127,4 +138,7 @@ docker compose down
 
 普通 `down` 保留具名卷 `zhitian-mvp-data`。不要把 `docker compose down -v` 当作日常命令；它会删除持久数据，只有隔离测试明确清理且已有可验证备份时才可使用。
 
-真实域名、HTTPS、服务器私有 Secret 注入、定时异地备份和镜像 registry 发布仍属于 Phase B，不在本仓库当前基线中伪装为已完成。
+服务器私有`.env`注入已经具备：后端凭据通过`env_file.path + format: raw`进入API容器，
+不写入Git或镜像。企业级密钥管理、自动轮换和受控分发机制仍未具备；真实域名、HTTPS、
+定时异地备份和镜像registry发布也仍待后续Phase B工作完成，不能把当前`.env`机制等同于
+完整的企业密钥治理。
