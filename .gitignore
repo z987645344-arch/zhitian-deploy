@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# 本机自签证书（由「生成本机自签证书.bat」产出，仅用于本机回环部署）
+local-tls/
+
 # 运行数据与备份产物
 data/
 backups/

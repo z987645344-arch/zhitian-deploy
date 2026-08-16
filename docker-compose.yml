@@ -110,10 +110,53 @@ services:
         condition: service_healthy
     ports:
       - "${SERVER_PUBLIC_IP}:80:8080"
+      - "${SERVER_PUBLIC_IP}:443:8443"
+    environment:
+      # 官方镜像只对模板目录下的*.template做变量替换，不碰直接挂载的nginx.conf。
+      NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/templates
+      # 默认输出目录/etc/nginx/conf.d是drwxr-xr-x root:root，本服务以101运行
+      # 写不进去；入口脚本遇到不可写的输出目录只打一行ERROR就跳过渲染。
+      # 指向下面单独给出的可写tmpfs。
+      NGINX_ENVSUBST_OUTPUT_DIR: /tmp/nginx-conf
+      # 入口脚本把"容器里所有环境变量名"作为envsubst的替换清单。因此只要有一个
+      # 环境变量与模板里的nginx变量同名，$host、$scheme这类值就会被静默改写，
+      # 而nginx照常加载、不报任何错（实测注入名为host的变量即可让
+      # proxy_set_header Host变成该变量的值）。这里把清单收窄到ZHITIAN_前缀，
+      # 需要注入的变量也一律用该前缀命名，使模板中其余$变量永远原样交给nginx。
+      NGINX_ENVSUBST_FILTER: ^ZHITIAN_
+      ZHITIAN_CUSTOMER_SERVER_NAME: ${ZHITIAN_CUSTOMER_SERVER_NAME}
+      ZHITIAN_ADMIN_SERVER_NAME: ${ZHITIAN_ADMIN_SERVER_NAME}
+      # 8080端口的HTTPS强制开关：on为生产必须，off仅供本机回环部署保留完整
+      # HTTP路由。这里的默认值刻意取on——`.env`漏掉该项时按生产行为运行，
+      # 不会静默把管理后台暴露在明文HTTP的根路径上。443两块不受此开关影响。
+      # 两个ZHITIAN_TLS_*_PATH只是宿主机源路径、不注入模板，因此不在本节出现。
+      ZHITIAN_FORCE_HTTPS: ${ZHITIAN_FORCE_HTTPS:-on}
+    # 入口脚本只把渲染结果写到NGINX_ENVSUBST_OUTPUT_DIR，不会替换镜像自带的
+    # /etc/nginx/nginx.conf，因此必须显式-c指向渲染结果；否则容器会带着默认
+    # 配置正常启动，只是完全不按本仓库的路由工作。
+    command: ["nginx", "-c", "/tmp/nginx-conf/nginx.conf", "-g", "daemon off;"]
     volumes:
-      - ./nginx/compose-nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/compose-nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
+      # 证书与私钥只读挂到容器内固定路径，模板直接引用该固定路径。
+      # 宿主机源路径由.env的ZHITIAN_TLS_*_PATH给出，可以是绝对路径，也可以是
+      # 相对本目录的路径（本机用./local-tls/...即可）。容器内路径必须写死：
+      # 挂载目标只能是POSIX绝对路径，把Windows路径当target会被Docker拒绝
+      # （invalid mount path ... must be absolute），本机开发因此无法沿用
+      # 「源路径与容器内路径同名」的写法。
+      - type: bind
+        source: ${ZHITIAN_TLS_CERT_PATH}
+        target: /etc/nginx/tls/origin.pem
+        read_only: true
+      - type: bind
+        source: ${ZHITIAN_TLS_KEY_PATH}
+        target: /etc/nginx/tls/origin.key
+        read_only: true
     tmpfs:
       - /tmp:size=16777216,mode=1777
+      # 入口脚本只在输出目录“已存在且可写”时才渲染，否则打一行ERROR就跳过，
+      # 容器随后因找不到配置而启动失败。它自己不会创建这一层目录，所以这里
+      # 必须单独给一块可写tmpfs；同时也让渲染结果不与上传临时文件抢/tmp配额。
+      - /tmp/nginx-conf:size=1048576,mode=1777
     networks:
       - frontend
       - backend
