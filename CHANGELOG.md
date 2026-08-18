@@ -1,5 +1,11 @@
 # 更新日志
 
+## 2026-08-18 放宽 `.gitignore` 的模板否定规则为 `!.env*.example`
+
+- 本仓库的三行 env 规则是另外三个仓库的范本，但其中 `!.env.example` 只放行恰好同名的文件：`.env.local.example`、`.env.production.example` 这类模板会命中 `.env.*` 被静默忽略，提交时无声排除且 diff 与 CI 都不报异常。改为 `!.env*.example`，只动这一行（1 增 1 删）。
+- 缺陷由知了hub 执行者在本机 Compose 验证时真实撞上（新建的 `.env.local.example` 差点消失），按「两个项目共同遵守的规则必须同时写进两份」四个仓库同批跟上。
+- 落盘探针实测 7 项全过：`.env`、`.env.local`、`.env.bak-1`、`.env.production`、`nginx/.env` 归 `!!`；`.env.local.example` 归 `??`；已跟踪的 `.env.example` 仍是已跟踪、无改动、`--no-index` 下 `-q` 返回 1。实测口径按手册第十一章：不看退出码、用未跟踪探针文件加 `git status --ignored` 落盘判定。 探针已清理，仓库只剩 `.gitignore` 一处改动。
+
 ## 2026-08-16 恢复本机开发通道：8080的HTTPS强制开关与本机自签证书
 
 - `nginx/compose-nginx.conf.template`的8080块新增`set $force_https ${ZHITIAN_FORCE_HTTPS};`，并恢复上一条改动删除的旧路由（`/api/`剥前缀、`= /customer`与`= /customer/`跳`login.html`、`/customer/`剥前缀、`/`到管理后台），每个location首行加`if ($force_https != off) { return 301 https://$host$request_uri; }`守卫——刻意不写成`= on`，这样`ON`、`true`、末尾多余空格等笔误都倒向生产行为，而不是落到else分支把企业管理后台重新摆回明文HTTP根路径。`location = /api/ready`刻意不加守卫——反代自身的健康检查打的就是它，加了跳转容器永远不会healthy、依赖它的服务也起不来。443两个块完全不受开关影响。

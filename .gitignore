@@ -1,7 +1,7 @@
 # 运行时密钥与本地覆盖
 .env
 .env.*
-!.env.example
+!.env*.example
 
 # 本机自签证书（由「生成本机自签证书.bat」产出，仅用于本机回环部署）
 local-tls/
