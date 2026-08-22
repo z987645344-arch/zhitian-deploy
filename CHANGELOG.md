@@ -1,5 +1,11 @@
 # 更新日志
 
+## 2026-08-22 v3.4.1：反向代理宿主机端口参数化
+
+- `docker-compose.yml`新增`SERVER_HTTP_PORT`与`SERVER_HTTPS_PORT`两个仅用于Compose端口发布的变量，默认仍将宿主机80/443映射到容器8080/8443，旧服务器行为不变。
+- 单公网IP承载多个项目时，可只在不跟踪的`.env`中改用其他宿主机端口，再由宿主机Nginx按域名分流；变量刻意不加`ZHITIAN_`前缀，因为它们不进入Nginx模板，也不应混入`NGINX_ENVSUBST_FILTER`替换清单。
+- 真实Compose验证覆盖默认端口与自定义8081/8444两组渲染，且均使用`docker compose config --quiet`完成语法检查；本轮未修改Nginx模板、容器内部端口或其他服务。
+
 ## 2026-08-18 放宽 `.gitignore` 的模板否定规则为 `!.env*.example`
 
 - 本仓库的三行 env 规则是另外三个仓库的范本，但其中 `!.env.example` 只放行恰好同名的文件：`.env.local.example`、`.env.production.example` 这类模板会命中 `.env.*` 被静默忽略，提交时无声排除且 diff 与 CI 都不报异常。改为 `!.env*.example`，只动这一行（1 增 1 删）。
