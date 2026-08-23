@@ -4,7 +4,7 @@
 
 当前编排包含四个服务：
 
-- `zhitian-api`：后端 API，源码和 Dockerfile 来自 `zhitian` 仓库；
+- `zhitian-api`：后端 API，源码和 Dockerfile 来自 `zhitian` 仓库；业务数据挂载`zhitian-mvp-data`，进程内每日加密归档单独挂载`zhitian-mvp-backups`；
 - `zhitian-admin`：管理后台静态站点，来自 `zhitian_admin` 仓库；
 - `zhitian-web`：customer 网页客户端，来自 `zhitian/web_client`；
 - `reverse-proxy`：唯一映射宿主机端口的 Nginx 入口。443 按主机名分流——客户端主机名到 `zhitian-web`、企业管理后台主机名到 `zhitian-admin`，两者的 `/api/` 都到 `zhitian-api`；80 的行为由 `ZHITIAN_FORCE_HTTPS` 决定，见「两种运行模式」。
@@ -156,7 +156,7 @@ curl --fail --silent --show-error -k --resolve admin.localhost:443:127.0.0.1 "ht
 |------|----------------|
 | `生成本机自签证书.bat` | **仅本机回环部署使用**。用一次性容器生成覆盖`localhost`/`admin.localhost`/`127.0.0.1`的自签证书到`local-tls/`，并设好uid 101可读的私钥权限。已存在则跳过，传参`force`可强制重新生成。该证书不被任何浏览器信任，也**不得**带到服务器；生产证书在服务器现场签发。 |
 | `一键启动MVP.bat` | 执行 `docker compose up -d`，等待后逐项打印四个服务的中文健康状态。日常启动使用；它不会自动重建旧标签镜像。脚本最后打印的`http://localhost`与`http://localhost/api`只在**本机回环部署且`ZHITIAN_FORCE_HTTPS=off`**时有效；生产（`on`）一律改用两个正式主机名的HTTPS地址，`http://`除`/api/ready`外都会301。Flutter调试客户端在本机回环时填`http://localhost/api`，不要加`:8000`；远程客户端填客户端主机名的`https://<客户端主机名>/api`，不要填裸IP。 |
-| `一键停止MVP.bat` | 执行不带 `-v` 的 `docker compose down`。容器和网络会停止并移除，业务数据继续保留在具名卷 `zhitian-mvp-data` 中。 |
+| `一键停止MVP.bat` | 执行不带 `-v` 的 `docker compose down`。容器和网络会停止并移除，业务数据与加密备份继续分别保留在具名卷 `zhitian-mvp-data`、`zhitian-mvp-backups` 中。 |
 | `重新构建并启动MVP.bat` | 代码或依赖更新后执行无缓存镜像构建，再运行 `docker compose down -v && docker compose up -d`。**该脚本会清空全部账号、文档、向量和历史记录**，只有输入完整的 `yes` 才会继续；普通升级若需要保留数据，不得使用此脚本。 |
 | `获取0号密码.bat` | 人工运行生产初始化脚本，创建0号developer并显示一次性密码。密码只显示一次，必须立即保存；0号、真实developer或业务数据已经存在时会拒绝重复初始化。 |
 | `重置0号密码.bat` | 仅用于“0号密码已遗失、且尚未完成首个真实developer接管”的应急恢复。脚本只处理唯一、启用、`is_default_account=1`的用户名0，并在没有其他启用中真实developer时才允许继续；必须输入`yes`确认，成功后旧密码立即失效。它不接受任意用户ID，也不能用于重置其他账号。 |
@@ -185,10 +185,9 @@ docker compose start
 docker compose down
 ```
 
-普通 `down` 保留具名卷 `zhitian-mvp-data`。不要把 `docker compose down -v` 当作日常命令；它会删除持久数据，只有隔离测试明确清理且已有可验证备份时才可使用。
+普通`down`保留具名卷`zhitian-mvp-data`和`zhitian-mvp-backups`。不要把`docker compose down -v`当作日常命令；它会同时删除持久数据与同机加密备份，只有隔离测试明确清理且另有可验证的卷外备份时才可使用。
 
 服务器私有`.env`注入已经具备：后端凭据通过`env_file.path + format: raw`进入API容器，
-不写入Git或镜像。企业级密钥管理、自动轮换和受控分发机制仍未具备；定时异地备份和镜像
-registry发布也仍待后续Phase B工作完成，不能把当前`.env`机制等同于完整的企业密钥治理。
+不写入Git或镜像。企业级密钥管理、自动轮换和受控分发机制仍未具备；进程内每日AES-256-GCM加密备份已随镜像发布并写入独立具名卷，但**自动异地复制**和镜像registry发布仍待后续Phase B完成，不能把同机归档或当前`.env`机制等同于完整灾备与企业密钥治理。
 双主机名与443监听在本仓库已经就位，但真实证书签发、DNS记录和线上验证属于服务器现场
 工作，本仓库只提供配置骨架和占位符。

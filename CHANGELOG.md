@@ -1,5 +1,19 @@
 # 更新日志
 
+## 2026-08-23 备份卷的部署验证补记（验证存档方）
+
+- 实施方会话无Docker CLI，把第2、3层交还验证存档方；本机Docker 29.6.2 + Compose v5.3.1可用，两层均已实跑。
+- **第2层**：用全占位`.env`（回环IP、localhost主机名、相对证书路径，无真实凭据或域名）执行`docker compose config --quiet`，退出码0且无输出；按红线只用`--quiet`，全程未展开完整config。`config --volumes`列出`zhitian_data`与`zhitian_backups`两个卷，后者外部名`zhitian-mvp-backups`、挂载点`/app/backups`，与注入的`SCHEDULED_BACKUP_PATH`一致。占位`.env`验后即删。
+- **第3层**：实际构建API镜像后，`/app/backups`属主为`appuser:appuser`（uid 999）；挂一个全新具名卷到该路径后属主**仍为**`appuser:appuser`，容器以`appuser`身份写入归档文件成功。「新建卷归root、非root容器写不进去」这个典型失败模式不存在。验证镜像与探针卷均已删除。
+- **第4层未做**：真实部署不归验证存档方，服务器仍是v3.6，本轮不含部署；异地复制仍未具备，维持既有待办。
+
+## 2026-08-23 独立备份卷承载进程内每日加密归档（实施方现场记录）
+
+- `zhitian-api`新增独立具名卷`zhitian-mvp-backups`并挂载到`/app/backups`，与业务数据卷`zhitian-mvp-data`分离，避免把归档写回正在备份的数据卷；普通`docker compose down`保留两卷，`down -v`会同时删除业务数据和同机备份。
+- Compose显式注入`SCHEDULED_BACKUP_ENABLED=true`、`SCHEDULED_BACKUP_PATH=/app/backups`、每日86400秒间隔与保留3份；保留数3由用户决定与另一项目保持一致，并非根据当前数据量推算。容器内部端口、反向代理、TLS模板和其他三个服务均未修改。后端镜像同步预建并授权`/app/backups`给非root `appuser`。
+- 调度层复用后端既有`backup_data.py`，产物仍是可由`restore_data.py`读取的AES-256-GCM `.ztbackup`，不再维护明文快照或硬链接去重实现。自动异地复制仍未具备；手工归档可写入`/app/backups/manual`后立即导出卷外。
+- **待验证边界**：实施方当前会话没有可用Docker CLI，未执行`docker compose config --quiet`、镜像构建或容器卷权限实测；这些项目必须由验证存档方在有Docker的环境补验，不能把静态配置审阅记成真实Compose通过。
+
 ## 2026-08-22 v3.4.1：反向代理宿主机端口参数化
 
 - `docker-compose.yml`新增`SERVER_HTTP_PORT`与`SERVER_HTTPS_PORT`两个仅用于Compose端口发布的变量，默认仍将宿主机80/443映射到容器8080/8443，旧服务器行为不变。

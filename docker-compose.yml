@@ -18,10 +18,16 @@ services:
     environment:
       LIBREOFFICE_PATH: /usr/bin/soffice
       TMPDIR: /app/data/tmp_uploads
+      # 进程内每日加密归档写入独立具名卷，不能写回正在备份的业务数据卷。
+      SCHEDULED_BACKUP_ENABLED: "true"
+      SCHEDULED_BACKUP_PATH: /app/backups
+      SCHEDULED_BACKUP_INTERVAL_SECONDS: "86400"
+      SCHEDULED_BACKUP_RETENTION: "3"
     expose:
       - "8000"
     volumes:
       - zhitian_data:/app/data
+      - zhitian_backups:/app/backups
     tmpfs:
       - /app/data/tmp_uploads:size=268435456,mode=1777
     networks:
@@ -191,3 +197,5 @@ networks:
 volumes:
   zhitian_data:
     name: zhitian-mvp-data
+  zhitian_backups:
+    name: zhitian-mvp-backups
