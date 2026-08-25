@@ -92,7 +92,7 @@ docker compose config --quiet
 
 1. 双击`生成本机自签证书.bat`。它用一次性容器生成，本机不需要安装openssl；证书写入被Git忽略的`local-tls/`，同时覆盖`localhost`、`admin.localhost`和`127.0.0.1`，并把私钥设为`root:101`、`0640`——反代以uid 101运行，权限不对会以`cannot load certificate key ... Permission denied`启动失败。已存在则跳过，需要重新生成时传参`force`。
 2. 按脚本末尾提示填写`.env`六项（其中`ZHITIAN_FORCE_HTTPS=off`、两个证书路径可用`./local-tls/...`相对写法）。
-3. 之后照常运行`一键启动MVP.bat`，`http://localhost`与`http://localhost/api`与以往一致。
+3. 之后照常运行`一键启动MVP.bat`；管理后台使用`http://localhost/`，customer网页端使用`http://localhost/customer/`，API使用`http://localhost/api/...`。
 
 本机也可以用`https://localhost`和`https://admin.localhost`走一遍**与生产同形**的双主机名路由，浏览器会提示证书不受信任，属预期。`*.localhost`由Chrome/Edge/Firefox自行解析到`127.0.0.1`，命令行工具则需要`--resolve`或hosts记录。
 
@@ -155,15 +155,16 @@ curl --fail --silent --show-error -k --resolve admin.localhost:443:127.0.0.1 "ht
 | 脚本 | 用途与安全边界 |
 |------|----------------|
 | `生成本机自签证书.bat` | **仅本机回环部署使用**。用一次性容器生成覆盖`localhost`/`admin.localhost`/`127.0.0.1`的自签证书到`local-tls/`，并设好uid 101可读的私钥权限。已存在则跳过，传参`force`可强制重新生成。该证书不被任何浏览器信任，也**不得**带到服务器；生产证书在服务器现场签发。 |
-| `一键启动MVP.bat` | 执行 `docker compose up -d`，等待后逐项打印四个服务的中文健康状态。日常启动使用；它不会自动重建旧标签镜像。脚本最后打印的`http://localhost`与`http://localhost/api`只在**本机回环部署且`ZHITIAN_FORCE_HTTPS=off`**时有效；生产（`on`）一律改用两个正式主机名的HTTPS地址，`http://`除`/api/ready`外都会301。Flutter调试客户端在本机回环时填`http://localhost/api`，不要加`:8000`；远程客户端填客户端主机名的`https://<客户端主机名>/api`，不要填裸IP。 |
+| `一键启动MVP.bat` | 执行 `docker compose up -d`，等待后逐项打印四个服务的中文健康状态。已有镜像的普通启停使用；它不会自动重建旧标签镜像。成功后统一打印管理后台`http://localhost/`、客户web端`http://localhost/customer/`和API`http://localhost/api/...`三个入口。本机直接使用HTTP需要`.env`设置`ZHITIAN_FORCE_HTTPS=off`；默认`on`会把健康检查以外的HTTP请求301到HTTPS。Flutter调试客户端在本机回环时填`http://localhost/api`，不要加`:8000`。 |
 | `一键停止MVP.bat` | 执行不带 `-v` 的 `docker compose down`。容器和网络会停止并移除，业务数据与加密备份继续分别保留在具名卷 `zhitian-mvp-data`、`zhitian-mvp-backups` 中。 |
+| `日常验证MVP.bat` | 代码改动后的常用入口：执行`docker compose up -d --build --force-recreate`，使用缓存增量构建并强制重建容器，**不带`-v`、保留本地账号/文档等具名卷数据**。构建前后打印API、管理后台与customer网页端三个镜像ID；ID变化是重建确实发生的唯一凭证，容器仅显示healthy不能替代。健康检查与三个入口提示和`一键启动MVP.bat`一致。 |
 | `重新构建并启动MVP.bat` | 代码或依赖更新后执行无缓存镜像构建，再运行 `docker compose down -v && docker compose up -d`。**该脚本会清空全部账号、文档、向量和历史记录**，只有输入完整的 `yes` 才会继续；普通升级若需要保留数据，不得使用此脚本。 |
 | `获取0号密码.bat` | 人工运行生产初始化脚本，创建0号developer并显示一次性密码。密码只显示一次，必须立即保存；0号、真实developer或业务数据已经存在时会拒绝重复初始化。 |
 | `重置0号密码.bat` | 仅用于“0号密码已遗失、且尚未完成首个真实developer接管”的应急恢复。脚本只处理唯一、启用、`is_default_account=1`的用户名0，并在没有其他启用中真实developer时才允许继续；必须输入`yes`确认，成功后旧密码立即失效。它不接受任意用户ID，也不能用于重置其他账号。 |
 
 `docker compose up -d`只会按现有镜像标签启动容器，不代表镜像已经包含最新源码。完成代码、依赖、Dockerfile、模型资产或静态前端更新后，必须先重新构建镜像；是否删除数据卷应依据实际升级方案和可验证备份单独决定。
 
-六个 `.bat` 文件使用 Windows 中文命令行兼容的 CP936（GBK）编码和 CRLF 换行。后续编辑时必须保留该编码；直接转换成UTF-8无BOM或UTF-8 BOM都可能让`cmd.exe`把中文拆成错误命令。`获取0号密码.bat`只在运行容器命令期间临时切换到UTF-8，结束前会恢复CP936，以同时保证批处理提示和容器输出不乱码；`生成本机自签证书.bat`走的是另一条路——传给容器的命令保持纯ASCII，中文提示全部由批处理自己输出，因此不需要切换代码页。
+七个 `.bat` 文件使用 Windows 中文命令行兼容的 CP936（GBK）编码和 CRLF 换行。后续编辑时必须保留该编码；直接转换成UTF-8无BOM或UTF-8 BOM都可能让`cmd.exe`把中文拆成错误命令。`获取0号密码.bat`只在运行容器命令期间临时切换到UTF-8，结束前会恢复CP936，以同时保证批处理提示和容器输出不乱码；`生成本机自签证书.bat`走的是另一条路——传给容器的命令保持纯ASCII，中文提示全部由批处理自己输出，因此不需要切换代码页。
 
 0号只承担空白生产实例的首个developer引导。它批准出第一个真实developer后会自动失效，届时应使用真实developer账号及正式找回流程，**不得**用`重置0号密码.bat`恢复0号。若脚本报告同名0号不止一个、0号已失效、身份标记异常或真实developer已经存在，应保留现场并排查数据，而不是绕过检查直接修改数据库。
 

@@ -1,5 +1,27 @@
 # 更新日志
 
+## 2026-08-23 存档补记（验证存档方）
+
+- 手册九.1例行核对：IPv4字面量0处、密钥凭据形态0处、服务器绝对路径0处、二进制0处；`zhitian_admin`与`zhitian_app`均0处改动，无跨仓库误改。
+- 新增的`日常验证MVP.bat`实测GBK可解码、非UTF-8、无BOM、CRLF 160/160，与既有两个批处理的编码约定完全一致——本仓批处理必须是CP936+CRLF，否则Windows CMD会把UTF-8中文注释误解析成命令。
+- 本轮提交按用户决定合并，但CHANGELOG条目未合并：本仓两条、后端仓库两条，三轮跨两仓分布。
+- 本次未执行Docker层验证：改动为compose环境变量替换与批处理新增，未触碰Dockerfile、依赖或容器运行语义。上一轮（v3.4.2）已实测备份卷属主与写入权限，本轮不重复。
+
+## 2026-08-23 v3.4.3：补齐保留数据的日常构建验证入口
+
+- 新增`日常验证MVP.bat`，执行`docker compose up -d --build --force-recreate`：增量构建并强制重建容器，但不带`-v`，保留业务与备份具名卷；脚本完整复用`一键启动MVP.bat`的Docker可用性检查、`config --quiet`校验和最长约120秒健康等待逻辑。
+- 构建前后分别打印`zhitian-api`、`zhitian-admin`、`zhitian-web`三个镜像ID，并明确“ID变化是重建发生的唯一凭证”；三者均未变化时给出构建上下文/缓存警告，避免把容器healthy误当作新代码已进入镜像。
+- `一键启动MVP.bat`与新脚本统一补齐三个本机入口：管理后台`/`、customer网页端`/customer/`（301到`/customer/login.html`）及`/api/...`；依据Compose默认`ZHITIAN_FORCE_HTTPS=on`的真实配置，明确提示本机HTTP验收需在未跟踪`.env`中设为`off`。
+- `重新构建并启动MVP.bat`与新脚本在开头互相说明适用场景：前者无缓存且会`down -v`清空数据，后者用于保留数据的日常验证。本轮不改Compose或Nginx模板、不部署。
+- **真实本机验收**：Docker 29.6.2 / Compose 5.3.1下运行最终脚本，API镜像ID由`4bd070b1...`变为`fe59a063...`、管理后台由`19021dce...`变为`0075fcab...`、customer网页端由`4a00a2b9...`变为`1307e7e9...`，四服务均通过健康检查。具名卷只读计数前后均为`users=5 / documents=5 / conversations=10`；`/`返回200、`/customer/`返回301且目标为`/customer/login.html`、`/api/ready`返回200。
+- 首次实跑因本机后端忽略文件`.env`尚缺另一功能轮新增的个人Key加密变量而如实失败，脚本没有误报成功；复测用一次性非秘密Compose覆盖值补齐环境，未读取、输出或修改真实凭据，验证后覆盖文件与临时回环`.env`均已删除。
+
+## 2026-08-23 定时备份改为UTC+8每日零点触发
+
+- Compose把旧的`SCHEDULED_BACKUP_INTERVAL_SECONDS=86400`替换为`SCHEDULED_BACKUP_LOCAL_TIME=00:00`，与后端固定时钟配置同步；时刻由后端显式按UTC+8解释，不依赖容器的UTC系统时区。
+- 备份卷、保留3份、调度与手工归档前缀隔离及容器内部路径均不变；本轮不部署，生产`.env`未修改。
+- 当前Codex会话的`docker`命令不在PATH，未把静态YAML审阅冒充成`docker compose config --quiet`通过；该项交由有Docker环境的验证存档方补验。
+
 ## 2026-08-23 备份卷的部署验证补记（验证存档方）
 
 - 实施方会话无Docker CLI，把第2、3层交还验证存档方；本机Docker 29.6.2 + Compose v5.3.1可用，两层均已实跑。
