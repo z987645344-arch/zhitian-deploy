@@ -7,14 +7,14 @@
 - `zhitian-api`：后端 API，源码和 Dockerfile 来自 `zhitian` 仓库；业务数据挂载`zhitian-mvp-data`，进程内每日加密归档单独挂载`zhitian-mvp-backups`；
 - `zhitian-admin`：管理后台静态站点，来自 `zhitian_admin` 仓库；
 - `zhitian-web`：customer 网页客户端，来自 `zhitian/web_client`；
-- `reverse-proxy`：唯一映射宿主机端口的 Nginx 入口。443 按主机名分流——客户端主机名到 `zhitian-web`、企业管理后台主机名到 `zhitian-admin`，两者的 `/api/` 都到 `zhitian-api`；80 的行为由 `ZHITIAN_FORCE_HTTPS` 决定，见「两种运行模式」。
+- `reverse-proxy`：唯一映射宿主机端口的 Nginx 入口。HTTPS入口按主机名分流——客户端主机名到 `zhitian-web`、企业管理后台主机名到 `zhitian-admin`，两者的 `/api/` 都到 `zhitian-api`；HTTP入口的行为由 `ZHITIAN_FORCE_HTTPS` 决定，见「两种运行模式」。
 
 仓库默认保持私有。虽然配置文件本身不含密钥，但它会暴露服务拓扑和资源边界；如后续决定公开，应先重新做一次信息暴露审查。
 
 ## 使用前提
 
-- 已安装 Docker 与 Docker Compose；由于API服务的`env_file`使用`format: raw`防止密钥中的`$`被Compose插值，Docker Compose必须为**2.30.0或更高版本**。本项目已在Docker Desktop 29.6.2、Docker Compose 5.3.1、WSL2环境验证。
-- 当前Phase B服务器实例要求在本仓库同目录、且不进入Git的`.env`中设置`SERVER_PUBLIC_IP`；宿主机网卡必须真实拥有该地址，且该地址的TCP 80未被其他进程占用。Compose只把知天入口发布到`${SERVER_PUBLIC_IP}:80`，不再通配监听整机所有网卡。若云厂商只做公网NAT而未把该地址配置到网卡，启动前必须先处理网络映射，不能直接套用本绑定。
+- 已安装 Docker 与 Docker Compose；由于API服务的`env_file`使用`format: raw`防止密钥中的`$`被Compose插值，Docker Compose必须为**2.30.0或更高版本**。安装时使用受支持的稳定版本，并把现场版本写入部署记录。
+- 在本仓库同目录、且不进入Git的`.env`中设置`SERVER_PUBLIC_IP`、`SERVER_HTTP_PORT`与`SERVER_HTTPS_PORT`。Compose只把知天入口发布到`${SERVER_PUBLIC_IP}:${SERVER_HTTP_PORT}`和`${SERVER_PUBLIC_IP}:${SERVER_HTTPS_PORT}`，不再通配监听整机所有网卡；绑定地址应是当前网络拓扑下宿主机实际可绑定、能够承接入口流量的地址，不假定经NAT映射的公网地址直接存在于本机网卡，并须确认两个宿主机端口均未被其他进程占用。
 - 部署仓库同目录的`.env`还需要`ZHITIAN_CUSTOMER_SERVER_NAME`、`ZHITIAN_ADMIN_SERVER_NAME`、`ZHITIAN_TLS_CERT_PATH`、`ZHITIAN_TLS_KEY_PATH`和`ZHITIAN_FORCE_HTTPS`，含义与格式见`.env.example`。两个主机名共用同一张证书；证书与私钥按`.env`给出的宿主机路径只读挂到容器内固定的`/etc/nginx/tls/`，Nginx模板引用的是该固定路径。
 - 三个仓库必须位于同一父目录，目录名保持如下：
 
@@ -29,7 +29,7 @@ workspace/
 ```
 
 - 后端运行配置位于 `zhitian/.env`。先从 `zhitian/.env.example`复制并在部署机器上填写，不要从开发机整目录拷贝真实 `.env`。
-- 当前 Phase A CI 不向镜像仓库推送镜像。换机部署通常应从源码构建；如果本机已经有三个匹配标签的镜像，也可以显式复用。
+- 当前CI不向镜像仓库推送镜像。换机部署通常应从源码构建；如果本机已经有三个与部署单目标标签匹配的镜像，也可以显式复用。
 
 ## 获取仓库
 
@@ -38,17 +38,17 @@ git clone https://github.com/z987645344-arch/zhitian.git
 git clone https://github.com/z987645344-arch/zhitian_admin.git
 git clone https://github.com/z987645344-arch/zhitian-deploy.git
 git -C zhitian fetch --tags origin
-git -C zhitian checkout --detach v3.3
+git -C zhitian checkout --detach TARGET_ZHITIAN_TAG
 git -C zhitian_admin fetch --tags origin
-git -C zhitian_admin checkout --detach v3.2
+git -C zhitian_admin checkout --detach TARGET_ADMIN_TAG
 git -C zhitian-deploy fetch --tags origin
-git -C zhitian-deploy checkout --detach v3.3
+git -C zhitian-deploy checkout --detach TARGET_DEPLOY_TAG
 cd zhitian-deploy
 ```
 
 `zhitian-deploy`是私有仓库，clone 前需要为 GitHub 配置有权访问该仓库的凭据。
 生产服务器必须checkout运维单指定的精确标签，不使用`git pull`盲跟`master`或`main`。
-上面是当前已确认组合；后续发布新版本时，应按新运维单同时更新三个目标标签。
+运行前把三个`TARGET_*_TAG`占位符分别替换为运维单批准的标签，并记录各标签解引用后的commit hash；三个仓库独立版本化，不要求标签号相同。
 
 ## 准备配置
 
@@ -59,8 +59,8 @@ cp ../zhitian/.env.example ../zhitian/.env
 cp .env.example .env
 ```
 
-分别填写后端运行配置，以及部署仓库`.env`中的`SERVER_PUBLIC_IP`、两个主机名、
-两个证书路径和`ZHITIAN_FORCE_HTTPS`。四项`CHANGE_ME_*`占位符必须逐项填实：
+分别填写后端运行配置，并按部署仓库`.env.example`逐项填写入口绑定地址、两个宿主机端口、两个主机名、
+两个证书路径和`ZHITIAN_FORCE_HTTPS`。所有`CHANGE_ME_*`占位符必须逐项填实：
 `docker compose config`只会在`SERVER_PUBLIC_IP`仍是占位符时报`invalid IP address`，
 证书路径带着占位符也照样通过语法检查，错误要到启动反向代理时才暴露。
 两份`.env`都不会进入Git，也不得写进Compose、Dockerfile、镜像或日志。
@@ -75,9 +75,9 @@ docker compose config --quiet
 
 ## 两种运行模式
 
-`.env`的`ZHITIAN_FORCE_HTTPS`只决定容器内8080（宿主机80）的行为；443的双主机名分流在两种取值下完全一致。
+`.env`的`ZHITIAN_FORCE_HTTPS`只决定容器内8080（宿主机`${SERVER_HTTP_PORT}`）的行为；容器内8443（宿主机`${SERVER_HTTPS_PORT}`）的双主机名分流在两种取值下完全一致。
 
-| 取值 | 适用 | 80端口行为 |
+| 取值 | 适用 | HTTP入口行为 |
 |------|------|-----------|
 | `on` | **生产必须** | 除`/api/ready`外一律`301`到`https://$host$request_uri` |
 | `off` | 仅本机回环部署（`SERVER_PUBLIC_IP=127.0.0.1`） | 保留完整HTTP路由：`/`到管理后台、`/customer/`到客户端网页版、`/api/`到后端 |
@@ -88,10 +88,10 @@ docker compose config --quiet
 
 ### 本机首次配置
 
-443块的`ssl_certificate`找不到文件时nginx直接启动失败，Compose的绑定挂载也要求源文件存在，因此**本机同样必须有一张证书**——它只是占位，本机流量走HTTP，不会有客户端校验它。
+容器内8443块的`ssl_certificate`找不到文件时nginx直接启动失败，Compose的绑定挂载也要求源文件存在，因此**本机同样必须有一张证书**——它只是占位，本机流量走HTTP，不会有客户端校验它。
 
-1. 双击`生成本机自签证书.bat`。它用一次性容器生成，本机不需要安装openssl；证书写入被Git忽略的`local-tls/`，同时覆盖`localhost`、`admin.localhost`和`127.0.0.1`，并把私钥设为`root:101`、`0640`——反代以uid 101运行，权限不对会以`cannot load certificate key ... Permission denied`启动失败。已存在则跳过，需要重新生成时传参`force`。
-2. 按脚本末尾提示填写`.env`六项（其中`ZHITIAN_FORCE_HTTPS=off`、两个证书路径可用`./local-tls/...`相对写法）。
+1. 双击`生成本机自签证书.bat`。它用一次性容器生成，本机不需要安装openssl；证书写入被Git忽略的`local-tls/`并覆盖本机回环访问名称，私钥设为`root:101`、`0640`，实际依赖容器内gid 101的组读权限。权限不对会以`cannot load certificate key ... Permission denied`启动失败，验证口径见`.env.example`；已存在则跳过，需要重新生成时传参`force`。
+2. 按脚本末尾提示和`.env.example`填写全部配置项（其中`ZHITIAN_FORCE_HTTPS=off`、两个证书路径可用`./local-tls/...`相对写法）。
 3. 之后照常运行`一键启动MVP.bat`；管理后台使用`http://localhost/`，customer网页端使用`http://localhost/customer/`，API使用`http://localhost/api/...`。
 
 本机也可以用`https://localhost`和`https://admin.localhost`走一遍**与生产同形**的双主机名路由，浏览器会提示证书不受信任，属预期。`*.localhost`由Chrome/Edge/Firefox自行解析到`127.0.0.1`，命令行工具则需要`--resolve`或hosts记录。
@@ -115,38 +115,43 @@ docker compose up -d --no-build
 
 健康检查按`ZHITIAN_FORCE_HTTPS`取值二选一。
 
-生产（`on`）：80除`/api/ready`外全部301，因此验收走两个主机名的HTTPS。
+生产（`on`）：HTTP入口除`/api/ready`外全部301，因此验收走两个主机名的HTTPS。
 
 ```bash
 set -a
 . ./.env
 set +a
-# 唯一保留在80的路径，反代容器的健康检查打的就是它
-curl --fail --silent --show-error "http://${SERVER_PUBLIC_IP}/api/ready"
-# 其余一律走443；两个主机名共用同一张证书
+# 唯一不跳转的HTTP路径，反代容器的健康检查打的就是它
+curl --fail --silent --show-error "http://${SERVER_PUBLIC_IP}:${SERVER_HTTP_PORT}/api/ready"
+# 其余外部流量一律走HTTPS；两个主机名共用同一张证书
 curl --fail --silent --show-error "https://${ZHITIAN_CUSTOMER_SERVER_NAME}/login.html"
 curl --fail --silent --show-error "https://${ZHITIAN_CUSTOMER_SERVER_NAME}/api/health"
 curl --fail --silent --show-error "https://${ZHITIAN_ADMIN_SERVER_NAME}/"
 curl --fail --silent --show-error "https://${ZHITIAN_ADMIN_SERVER_NAME}/api/health"
-# 80的其余路径应当返回301，而不是内容
-curl --silent --output /dev/null --write-out '%{http_code} %{redirect_url}\n' "http://${SERVER_PUBLIC_IP}/"
+# HTTP入口的其余路径应当返回301，而不是内容
+curl --silent --output /dev/null --write-out '%{http_code} %{redirect_url}\n' "http://${SERVER_PUBLIC_IP}:${SERVER_HTTP_PORT}/"
 ```
 
-本机回环（`off`）：80保留完整HTTP路由，443同形可选。
+若宿主机HTTPS端口不是标准端口，验收地址取决于实际拓扑：由上游终止TLS时，应从外部按真实路由验证标准HTTPS入口；由本仓反向代理直接对外提供非标准HTTPS端口时，URL必须显式带上`${SERVER_HTTPS_PORT}`。不能用回环端口可访问代替外部链路验收。
+
+本机回环（`off`）：`${SERVER_HTTP_PORT}`保留完整HTTP路由，`${SERVER_HTTPS_PORT}`上的同形TLS验证可选。
 
 ```bash
-curl --fail --silent --show-error "http://localhost/"
-curl --fail --silent --show-error "http://localhost/customer/login.html"
-curl --fail --silent --show-error "http://localhost/api/health"
-curl --fail --silent --show-error "http://localhost/api/ready"
+set -a
+. ./.env
+set +a
+curl --fail --silent --show-error "http://localhost:${SERVER_HTTP_PORT}/"
+curl --fail --silent --show-error "http://localhost:${SERVER_HTTP_PORT}/customer/login.html"
+curl --fail --silent --show-error "http://localhost:${SERVER_HTTP_PORT}/api/health"
+curl --fail --silent --show-error "http://localhost:${SERVER_HTTP_PORT}/api/ready"
 # 自签证书不受信任，本机核对需要 -k
-curl --fail --silent --show-error -k "https://localhost/login.html"
-curl --fail --silent --show-error -k --resolve admin.localhost:443:127.0.0.1 "https://admin.localhost/"
+curl --fail --silent --show-error -k "https://localhost:${SERVER_HTTPS_PORT}/login.html"
+curl --fail --silent --show-error -k --resolve "admin.localhost:${SERVER_HTTPS_PORT}:127.0.0.1" "https://admin.localhost:${SERVER_HTTPS_PORT}/"
 ```
 
-只有反向代理映射宿主机`${SERVER_PUBLIC_IP}`的80与443；API、管理后台和customer网页端的内部端口不会直接暴露。容器健康检查仍在各容器内部访问`127.0.0.1:8080/8000`，不依赖宿主机发布地址，也不受`ZHITIAN_FORCE_HTTPS`影响。
+只有反向代理映射宿主机`${SERVER_PUBLIC_IP}`的`${SERVER_HTTP_PORT}`与`${SERVER_HTTPS_PORT}`；API、管理后台和customer网页端的内部端口不会直接暴露。容器健康检查仍在各容器内部访问回环地址的8080/8000端口，不依赖宿主机发布地址，也不受`ZHITIAN_FORCE_HTTPS`影响。
 
-> 当前`docker-compose.yml`通过未跟踪的`SERVER_PUBLIC_IP`接收实例专属IP。下面的Windows批处理不会自动猜测地址；在其他主机使用前必须先从`.env.example`复制并填写本机值。Phase C交付时同样由客户填写自己的地址，不携带个人服务器IP。
+> 当前`docker-compose.yml`通过未跟踪的`SERVER_PUBLIC_IP`、`SERVER_HTTP_PORT`与`SERVER_HTTPS_PORT`接收实例绑定地址和宿主机入口端口。下面的Windows批处理不会自动猜测这些值；在其他主机使用前必须先从`.env.example`复制并填写。Phase C交付时同样由客户填写自己的地址与端口，不携带个人服务器配置。
 
 ## Windows 一键操作脚本
 
@@ -154,7 +159,7 @@ curl --fail --silent --show-error -k --resolve admin.localhost:443:127.0.0.1 "ht
 
 | 脚本 | 用途与安全边界 |
 |------|----------------|
-| `生成本机自签证书.bat` | **仅本机回环部署使用**。用一次性容器生成覆盖`localhost`/`admin.localhost`/`127.0.0.1`的自签证书到`local-tls/`，并设好uid 101可读的私钥权限。已存在则跳过，传参`force`可强制重新生成。该证书不被任何浏览器信任，也**不得**带到服务器；生产证书在服务器现场签发。 |
+| `生成本机自签证书.bat` | **仅本机回环部署使用**。用一次性容器生成覆盖本机回环访问名称的自签证书到`local-tls/`，并设置依赖容器内gid 101组读权限的`root:101`、`0640`私钥；具体验证口径见`.env.example`。已存在则跳过，传参`force`可强制重新生成。该证书不被任何浏览器信任，也**不得**带到服务器；生产证书在服务器现场签发。 |
 | `一键启动MVP.bat` | 执行 `docker compose up -d`，等待后逐项打印四个服务的中文健康状态。已有镜像的普通启停使用；它不会自动重建旧标签镜像。成功后统一打印管理后台`http://localhost/`、客户web端`http://localhost/customer/`和API`http://localhost/api/...`三个入口。本机直接使用HTTP需要`.env`设置`ZHITIAN_FORCE_HTTPS=off`；默认`on`会把健康检查以外的HTTP请求301到HTTPS。Flutter调试客户端在本机回环时填`http://localhost/api`，不要加`:8000`。 |
 | `一键停止MVP.bat` | 执行不带 `-v` 的 `docker compose down`。容器和网络会停止并移除，业务数据与加密备份继续分别保留在具名卷 `zhitian-mvp-data`、`zhitian-mvp-backups` 中。 |
 | `日常验证MVP.bat` | 代码改动后的常用入口：执行`docker compose up -d --build --force-recreate`，使用缓存增量构建并强制重建容器，**不带`-v`、保留本地账号/文档等具名卷数据**。构建前后打印API、管理后台与customer网页端三个镜像ID；ID变化是重建确实发生的唯一凭证，容器仅显示healthy不能替代。健康检查与三个入口提示和`一键启动MVP.bat`一致。 |
@@ -190,5 +195,5 @@ docker compose down
 
 服务器私有`.env`注入已经具备：后端凭据通过`env_file.path + format: raw`进入API容器，
 不写入Git或镜像。企业级密钥管理、自动轮换和受控分发机制仍未具备；进程内每日AES-256-GCM加密备份已随镜像发布并写入独立具名卷，但**自动异地复制**和镜像registry发布仍待后续Phase B完成，不能把同机归档或当前`.env`机制等同于完整灾备与企业密钥治理。
-双主机名与443监听在本仓库已经就位，但真实证书签发、DNS记录和线上验证属于服务器现场
+双主机名TLS监听在本仓库已经就位，但真实证书签发、DNS记录和线上验证属于服务器现场
 工作，本仓库只提供配置骨架和占位符。
