@@ -36,12 +36,12 @@ http {
     # 为受支持的localhost/admin.localhost组合，且请求Host也是本机名时，
     # 根路径才继续指向管理后台；真实主机名配置下伪造Host: localhost仍会
     # 倒向客户端。本机/customer/始终显式走客户端，三条既有流程不变。
-    map "${ZHITIAN_CUSTOMER_SERVER_NAME}|${ZHITIAN_ADMIN_SERVER_NAME}|$host" $http_default_frontend_upstream {
+    map "${ZHITIAN_CUSTOMER_SERVER_NAME}|${ZHITIAN_ADMIN_SERVER_NAME}|$host" $default_frontend_upstream {
         default zhitian-web:8080;
         "localhost|admin.localhost|localhost" zhitian-admin:8080;
         "localhost|admin.localhost|127.0.0.1" zhitian-admin:8080;
     }
-    map "${ZHITIAN_CUSTOMER_SERVER_NAME}|${ZHITIAN_ADMIN_SERVER_NAME}|$host" $http_root_is_customer {
+    map "${ZHITIAN_CUSTOMER_SERVER_NAME}|${ZHITIAN_ADMIN_SERVER_NAME}|$host" $root_is_customer {
         default 1;
         "localhost|admin.localhost|localhost" 0;
         "localhost|admin.localhost|127.0.0.1" 0;
@@ -123,7 +123,7 @@ http {
         # 重定向到login.html。本机localhost根路径则继续代理到管理后台。
         location = / {
             if ($force_https != off) { return 301 https://$host$request_uri; }
-            if ($http_root_is_customer = 1) { return 301 /login.html; }
+            if ($root_is_customer = 1) { return 301 /login.html; }
             set $admin_upstream zhitian-admin:8080;
             proxy_pass http://$admin_upstream;
             proxy_http_version 1.1;
@@ -136,7 +136,7 @@ http {
 
         location / {
             if ($force_https != off) { return 301 https://$host$request_uri; }
-            proxy_pass http://$http_default_frontend_upstream;
+            proxy_pass http://$default_frontend_upstream;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

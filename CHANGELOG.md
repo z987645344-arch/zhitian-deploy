@@ -1,5 +1,12 @@
 # 更新日志
 
+## 2026-09-05 消除8080路由变量与Nginx请求头前缀的命名歧义
+
+- 将8080路由两个`map`变量及其全部引用由`$http_*`改为无保留前缀的`$default_frontend_upstream`与`$root_is_customer`，共找全并修改4处；map键、分支值、location条件和代理目标均未改变。
+- 改名前后分别在旁路容器实测：客户端、管理后台、陌生Host、伪造`Host: localhost`与`127.0.0.1 /api/ready`的路由结果完全一致；携带同名`Root-Is-Customer`、`Default-Frontend-Upstream`请求头也不改变结果。
+- 渲染配置已无旧`$http_`自定义变量并通过`nginx -t`；本机`localhost/admin.localhost`三个既有入口保持不变，空的必填`SERVER_NAME`仍使Nginx退出码为1。
+- `docker compose config --quiet`通过；临时容器、网络和卷已清理。本轮未推送、未打标、未部署。
+
 ## 2026-09-05 将8080入口按主机名隔离客户端与管理后台
 
 - 将8080从单一`server_name _`块拆为与8443一致的客户端优先、管理后台独立两个主机名块；客户端块保持配置顺序第一，使未知Host默认落到客户端而非管理后台，不再依赖仓库外的上游代理提供该边界。
