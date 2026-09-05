@@ -1,5 +1,13 @@
 # 更新日志
 
+## 2026-09-05 存档：v3.5 覆盖 v3.4.3 之后的四条提交
+
+- **本条为存档条目**。附注标签 `v3.5` 打在本条目所在的提交上，覆盖 `v3.4.3..v3.5` 共**五条**：`ee106aa` 说明8443占位证书与容器组权限边界、`032bc33` 统一部署README端口与证书权限口径、`103d1ab` 8080入口按主机名隔离客户端与管理后台、`939d184` 避免8080路由变量使用Nginx请求头前缀，以及本条存档记录。四条业务提交的改动量取自 `git diff --numstat`：`.env.example` 9 增 3 删、`README.md` 37 增 32 删、`nginx/compose-nginx.conf.template` 95 增 32 删（其中 `939d184` 占 4 增 4 删）。
+- **两段式依据**：`103d1ab` 把容器内 8080 由单一 `server_name _` 兜底块拆成按主机名分流的两个块，是渲染产物上的真实行为变化；`939d184` 虽只改变量名，但同样落在渲染出的配置上，且 `$http_` 是 Nginx 内建请求头变量前缀，自定义变量与之同名会造成语义含糊。四条混有 docs 与 fix，按手册 8.1 第 3 条「混合改动按代码变化处理」整体走两段式。
+- **⚠️ 部署交接：不需要重建镜像，但 `--force-recreate` 是必须的**。`reverse-proxy` 用的是官方镜像 `nginx:stable-alpine`，Compose 中没有 `build` 段，模板是 bind mount 进容器的（`./nginx/compose-nginx.conf.template` → `/etc/nginx/templates/nginx.conf.template:ro`）。`up -d` **检测不到 bind mount 的内容变化**，会打印 `Running` 然后什么都不做——`git pull` 成功、`up -d` 说 Running、容器 healthy，而实际渲染出的配置还是旧的，全程不报任何错。
+- **⚠️ 验证必须看渲染产物**（容器内 `/etc/nginx/nginx.conf`），**不能只跑 `nginx -t`**：旧配置同样能通过语法检查，`nginx -t` 只证语法不证内容。
+- **本轮自测（本仓库无 CI，自测即唯一门禁）**：以占位主机名 `envsubst` 渲染后得 4 个 `server` 块——容器内 8080 两个（客户端在前、管理后台在后）、8443 两个；未替换的 `${ZHITIAN_*}` 残留 0 处；`$host` 23 次、`$request_uri` 9 次、`$scheme`／`$remote_addr`／`$proxy_add_x_forwarded_for` 各 11 次全部原样保留；模板与渲染产物的 `$http_` 残留均为 0；`docker compose config --quiet` 退出码 0 且无输出；渲染产物在补入临时自签证书后 `nginx -t` 报 `syntax is ok / test is successful`（首次失败仅因一次性容器内缺证书文件，属测试夹具缺件而非配置缺陷）。
+
 ## 2026-09-05 消除8080路由变量与Nginx请求头前缀的命名歧义
 
 - 将8080路由两个`map`变量及其全部引用由`$http_*`改为无保留前缀的`$default_frontend_upstream`与`$root_is_customer`，共找全并修改4处；map键、分支值、location条件和代理目标均未改变。
