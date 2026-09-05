@@ -31,7 +31,10 @@ services:
     tmpfs:
       - /app/data/tmp_uploads:size=268435456,mode=1777
     networks:
-      - backend
+      backend:
+        priority: 100
+      ops-bridge:
+        priority: 10
     restart: unless-stopped
     stop_grace_period: 45s
     init: true
@@ -193,6 +196,9 @@ networks:
     internal: true
   backend:
     driver: bridge
+  ops-bridge:
+    name: zhiliao-ops-bridge
+    external: true
 
 volumes:
   zhitian_data:
