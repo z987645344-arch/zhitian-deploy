@@ -1,5 +1,12 @@
 # 更新日志
 
+## 2026-09-05 将8080入口按主机名隔离客户端与管理后台
+
+- 将8080从单一`server_name _`块拆为与8443一致的客户端优先、管理后台独立两个主机名块；客户端块保持配置顺序第一，使未知Host默认落到客户端而非管理后台，不再依赖仓库外的上游代理提供该边界。
+- `ZHITIAN_FORCE_HTTPS`仅继续控制HTTP跳转，不再决定站点分流；上游终止TLS且明文回源时也能按既有两个`SERVER_NAME`分流。仅当配置值确为`localhost/admin.localhost`组合时，Nginx `map`才保留本机根路径到管理后台；真实主机名配置下伪造`Host: localhost`仍倒向客户端。`/customer/`与`/api/`既有入口保持不变。
+- 两个8080块各自保留无HTTPS跳转的精确`location = /api/ready`，确保Nginx先按Host选中任一块后健康检查仍可达；空的必填主机名刻意渲染为非法`server_name ;`并使Nginx退出码为1，不静默接受错误配置。
+- `docker compose config --quiet`通过；旁路一次性容器的两组渲染配置均通过`nginx -t`，实测客户端/管理/陌生Host/真实配置下伪造`localhost`/`127.0.0.1`健康路径分别命中`CLIENT`/`ADMIN`/`CLIENT`/`CLIENT`/`API_READY`，本机三个既有入口行为不变。临时容器、网络和卷已全部清理，本轮未部署、未接触生产。
+
 ## 2026-09-04 找全部署README的端口、拓扑与证书权限旧口径
 
 - 将宿主机入口改写为`${SERVER_PUBLIC_IP}:${SERVER_HTTP_PORT}`与`${SERVER_PUBLIC_IP}:${SERVER_HTTPS_PORT}`两条参数化映射；VPC NAT场景不再错误要求公网地址必须直接存在于宿主机网卡，并同步修正健康检查命令中的HTTP端口。
