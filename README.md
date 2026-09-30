@@ -9,7 +9,15 @@
 - `zhitian-web`：customer 网页客户端，来自 `zhitian/web_client`；
 - `reverse-proxy`：唯一映射宿主机端口的 Nginx 入口。HTTPS入口按主机名分流——客户端主机名到 `zhitian-web`、企业管理后台主机名到 `zhitian-admin`，两者的 `/api/` 都到 `zhitian-api`；HTTP入口的行为由 `ZHITIAN_FORCE_HTTPS` 决定，见「两种运行模式」。
 
-仓库默认保持私有。虽然配置文件本身不含密钥，但它会暴露服务拓扑和资源边界；如后续决定公开，应先重新做一次信息暴露审查。
+本仓库已公开。公开前做过一次覆盖全部提交历史的信息暴露审查：受版本控制的文件与历史中没有密钥、真实域名、服务器公网 IP 或服务器路径，`.env`、证书与备份产物从未入库。此后任何改动都必须保持这一点，真实值只写入被 Git 忽略的 `.env`。
+
+## 与 zhiliao-gateway 的关系
+
+生产服务器是单公网 IP，同时承载知天和知了hub，因此公网 80/443 由统一前置网关 [zhiliao-gateway](https://github.com/z987645344-arch/zhiliao-gateway) 独占：网关终止 TLS、按主机名把流量转发到各项目的回环端口。
+
+在这种拓扑下，本仓库的 `reverse-proxy` 照常运行，只是从“对外入口”降级为网关后面的后端：`.env` 中设置 `SERVER_PUBLIC_IP=127.0.0.1`、把 `SERVER_HTTP_PORT` / `SERVER_HTTPS_PORT` 改为未占用的非标准端口；网关以明文 HTTP 回源，所以网关的 `TIAN_BACKEND_PORT` 要等于这里的 `SERVER_HTTP_PORT`。此时 `ZHITIAN_FORCE_HTTPS=off` 与 `SERVER_PUBLIC_IP=127.0.0.1` 必须成对出现：HTTP 跳转已由网关负责，而关闭跳转之所以安全，唯一依据是端口只绑定回环地址；若把绑定改回公网地址而没有同时恢复 `on`，管理后台会以明文 HTTP 暴露在公网。
+
+单独部署（服务器上只有知天）时不需要网关，`reverse-proxy` 直接绑定公网地址与 80/443，`ZHITIAN_FORCE_HTTPS=on`。
 
 ## 使用前提
 
@@ -197,3 +205,7 @@ docker compose down
 不写入Git或镜像。企业级密钥管理、自动轮换和受控分发机制仍未具备；进程内每日AES-256-GCM加密备份已随镜像发布并写入独立具名卷，但**自动异地复制**和镜像registry发布仍待后续Phase B完成，不能把同机归档或当前`.env`机制等同于完整灾备与企业密钥治理。
 双主机名TLS监听在本仓库已经就位，但真实证书签发、DNS记录和线上验证属于服务器现场
 工作，本仓库只提供配置骨架和占位符。
+
+## License
+
+当前仓库未附带开源许可证，默认保留全部权利；公开复用前请先联系项目作者。
