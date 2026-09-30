@@ -1,5 +1,11 @@
 # 更新日志
 
+## 2026-09-30 文档：说明与 zhiliao-gateway 的关系，更新公开状态
+
+- README 新增「与 zhiliao-gateway 的关系」：生产单 IP 下公网 80/443 由网关独占，本仓库 `reverse-proxy` 继续运行但降级为回环后端；写明 `SERVER_PUBLIC_IP=127.0.0.1` 与 `ZHITIAN_FORCE_HTTPS=off` 必须成对、网关 `TIAN_BACKEND_PORT` 对应 `SERVER_HTTP_PORT`，以及单独部署时的做法。避免两个仓库各自描述 80/443 时被误读为端口冲突。
+- 「仓库默认保持私有」一句改为已公开的现状，并记录公开前做过覆盖全部提交历史的信息暴露审查（无密钥、真实域名、公网 IP、服务器路径入库）。
+- 补充许可证说明。本轮只改文档，未改 Compose、Nginx 模板、变量或脚本。
+
 ## 2026-09-05 为API接入独立运维内部网络
 
 - 为`zhitian-api`新增外部内部网络`zhiliao-ops-bridge`，不发布任何端口、不修改反代模板；网络由部署方预先创建，Compose不承担创建职责。
